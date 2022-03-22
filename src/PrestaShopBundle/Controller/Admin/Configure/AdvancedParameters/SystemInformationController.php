@@ -54,6 +54,7 @@ class SystemInformationController extends FrameworkBundleAdminController
         return [
             'layoutHeaderToolbarBtn' => [],
             'layoutTitle' => $this->trans('Information', 'Admin.Navigation.Menu'),
+            'requireAddonsSearch' => true,
             'requireBulkActions' => false,
             'showContentHeader' => true,
             'enableSidebar' => true,
@@ -74,6 +75,41 @@ class SystemInformationController extends FrameworkBundleAdminController
     public function displayCheckFilesAction()
     {
         return new JsonResponse($this->getRequiredFilesChecker()->getListOfUpdatedFiles());
+    }
+
+    /**
+     * @AdminSecurity("is_granted('read', request.get('_legacy_controller'))", message="Access denied.")
+     *
+     * @return JsonResponse
+     */
+    public function displayCheckDbAction()
+    {
+        $dbName = $this->getParameter('database_name');
+        $dbPrefix = $this->getParameter('database_prefix');
+
+        $em = $this->get('doctrine')->getManager();
+        
+        $metadata = $em->getMetadataFactory()->getAllMetadata();
+        dump($metadata);
+
+        $schemaTool = new \Doctrine\ORM\Tools\SchemaTool($em);
+        $updateSchemaSql = $schemaTool->getUpdateSchemaSql($metadata, false);
+
+        //Remove all DROP TABLE commands
+        foreach ($updateSchemaSql as $key => $sql) {
+            $matches = [];
+            if (preg_match('/DROP TABLE (.+?)$/', $sql, $matches)) {
+                unset($updateSchemaSql[$key]);
+            }
+            if (preg_match('/DROP INDEX (.+?)$/', $sql, $matches)) {
+                unset($updateSchemaSql[$key]);
+            }
+            if (preg_match('/ADD CONSTRAINT (.+?)$/', $sql, $matches)) {
+                unset($updateSchemaSql[$key]);
+            }
+        }
+
+        return new JsonResponse(["missing" => [$updateSchemaSql]]);
     }
 
     /**
